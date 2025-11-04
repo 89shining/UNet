@@ -1,5 +1,5 @@
 #----------------------------------------------------#
-#   DeeplabV3+ 批量预测（医学图像 2D切片）
+#  UNet 批量预测（医学图像 2D切片）
 #----------------------------------------------------#
 import os
 import torch
@@ -9,31 +9,46 @@ from tqdm import tqdm
 from PIL import Image
 from unet import Unet
 from collections import OrderedDict
+import re
 
 if __name__ == "__main__":
     #=============================================#
     #   加载模型
     #=============================================#
-    deeplab = Unet(backbone='resnet50')   # 指定主干
     weight_path = "logs/best_epoch_weights.pth"
+    unet = Unet(backbone='resnet50')   # 与 Deeplab 一样
 
     # 自动兼容单/多GPU训练权重
     state_dict = torch.load(weight_path, map_location='cuda')
     new_state_dict = OrderedDict()
     for k, v in state_dict.items():
         new_state_dict[k.replace("module.", "")] = v
-    deeplab.net.load_state_dict(new_state_dict, strict=False)
+
+    # ⚠️ 注意：Unet 类比 Deeplab 多封装一层
+    # 实际 nn.Module 是 unet.net.module 或 unet.net.net
+    # 所以需要尝试加载到正确的子模型中
+    try:
+        unet.net.net.load_state_dict(new_state_dict, strict=False)
+        print(f"✅ 权重已加载到 unet.net.net")
+    except Exception as e:
+        try:
+            unet.net.module.load_state_dict(new_state_dict, strict=False)
+            print(f"✅ 权重已加载到 unet.net.module")
+        except:
+            unet.net.load_state_dict(new_state_dict, strict=False)
+            print(f"✅ 权重已加载到 unet.net")
+
     print(f"已加载模型权重: {weight_path}")
 
     # 启用灰度mask输出（背景=0，目标=255）
-    deeplab.gray_output = True
+    unet.gray_output = True
 
     #=============================================#
     #   输入/输出路径设置
     #=============================================#
     dir_origin_path = r"/home/wusi/UNet/img"      # 测试集切片
     dir_save_path   = r"/home/wusi/UNet/output"   # 结果保存路径
-    ref_root        = r"/home/wusi/SAMdata/20250711_GTVp/datanii/test_nii"  # GT路径（用于判断空层）
+    ref_root        = r"/home/wusi/SAMdata/20250711_GTVp/datanii/test_nii"
     os.makedirs(dir_save_path, exist_ok=True)
 
     #=============================================#
@@ -43,22 +58,18 @@ if __name__ == "__main__":
         f for f in os.listdir(dir_origin_path)
         if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif'))
     ]
-
-    # ---- 如果按 p_xxx_slice 命名 ----
-    import re
     pattern = re.compile(r"^(p_\d+)_slice(\d+)\.(jpg|png|jpeg|tif)$", re.IGNORECASE)
 
     for img_name in tqdm(img_names, desc="Predicting"):
         image_path = os.path.join(dir_origin_path, img_name)
 
-        # 解析病人ID和层号
         match = pattern.match(img_name)
         if not match:
             continue
         pid = match.group(1)
         slice_id = int(match.group(2))
 
-        # 加载GT体积，用于判断空切片
+        # 判断该层是否为空层
         gt_path = os.path.join(ref_root, pid, "GTVp.nii.gz")
         if not os.path.exists(gt_path):
             gt_path = os.path.join(ref_root, pid, "label.nii.gz")
@@ -80,9 +91,10 @@ if __name__ == "__main__":
         # detect_image 输出二值mask (灰度)
         #-----------------------------------------#
         image = Image.open(image_path)
-        r_image = deeplab.detect_image(image)
+        r_image = unet.detect_image(image)
 
         save_path = os.path.join(dir_save_path, img_name)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         r_image.save(save_path)
 
-    print(f"批量预测完成！结果保存在: {dir_save_path}")
+    print(f"🎯 批量预测完成！结果保存在: {dir_save_path}")
