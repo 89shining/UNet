@@ -40,7 +40,7 @@ def fast_hist(a, b, n):
     #   np.bincount计算了从0到n**2-1这n**2个数中每个数出现的次数，返回值形状(n, n)
     #   返回中，写对角线上的为分类正确的像素点
     #--------------------------------------------------------------------------------#
-    return np.bincount(n * a[k].astype(int) + b[k], minlength=n ** 2).reshape(n, n)  
+    return np.bincount(n * a[k].astype(int) + b[k], minlength=n ** 2).reshape(n, n)
 
 def per_class_iu(hist):
     return np.diag(hist) / np.maximum((hist.sum(1) + hist.sum(0) - np.diag(hist)), 1) 
@@ -121,7 +121,7 @@ def compute_mIoU(gt_dir, pred_dir, png_name_list, num_classes, name_classes=None
     #   在所有验证集图像上求所有类别平均的mIoU值，计算时忽略NaN值
     #-----------------------------------------------------------------#
     print('===> mIoU: ' + str(round(np.nanmean(IoUs) * 100, 2)) + '; mPA: ' + str(round(np.nanmean(PA_Recall) * 100, 2)) + '; Accuracy: ' + str(round(per_Accuracy(hist) * 100, 2)))  
-    return np.array(hist, np.int), IoUs, PA_Recall, Precision
+    return np.array(hist, dtype=int), IoUs, PA_Recall, Precision
 
 def adjust_axes(r, t, fig, axes):
     bb                  = t.get_window_extent(renderer=r)
